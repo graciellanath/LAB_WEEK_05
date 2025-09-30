@@ -8,6 +8,7 @@ import androidx.activity.enableEdgeToEdge
 import androidx.appcompat.app.AppCompatActivity
 import androidx.core.view.ViewCompat
 import androidx.core.view.WindowInsetsCompat
+import com.bumptech.glide.Glide
 import com.example.lab_week_05.model.ImageData
 import okhttp3.OkHttpClient
 import okhttp3.logging.HttpLoggingInterceptor
@@ -18,7 +19,7 @@ import com.squareup.moshi.kotlin.reflect.KotlinJsonAdapterFactory
 
 class MainActivity : AppCompatActivity() {
 
-    // ✅ Retrofit instance dengan Moshi + Logging Interceptor
+    // Retrofit instance dengan Moshi + Logging Interceptor
     private val retrofit by lazy {
         val moshi = Moshi.Builder()
             .add(KotlinJsonAdapterFactory())
@@ -39,29 +40,25 @@ class MainActivity : AppCompatActivity() {
             .build()
     }
 
-    // ✅ CatApiService instance
+    // CatApiService instance
     private val catApiService by lazy {
         retrofit.create(CatApiService::class.java)
     }
 
-    // ✅ View untuk menampilkan response
-    private val apiResponseView: TextView by lazy {
-        findViewById(R.id.api_response)
-    }
-
-    private val imageResultView: ImageView by lazy {
-        findViewById(R.id.image_result)
-    }
-
-    // ✅ ImageLoader pakai Glide
-    private val imageLoader: ImageLoader by lazy {
-        GlideLoader(this)
-    }
+    // Views
+    private lateinit var breedLabel: TextView
+    private lateinit var apiResponseView: TextView
+    private lateinit var imageResultView: ImageView
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         enableEdgeToEdge()
         setContentView(R.layout.activity_main)
+
+        // inisialisasi views
+        breedLabel = findViewById(R.id.breed_label)
+        apiResponseView = findViewById(R.id.api_response)
+        imageResultView = findViewById(R.id.image_result)
 
         // panggil API function saat activity dibuat
         getCatImageResponse()
@@ -73,31 +70,40 @@ class MainActivity : AppCompatActivity() {
         }
     }
 
-    // ✅ fungsi untuk ambil data dari Cat API
+    // fungsi untuk ambil data dari Cat API
     private fun getCatImageResponse() {
         val call = catApiService.searchImages(1, "full")
-        call.enqueue(object: Callback<List<ImageData>> {
+        call.enqueue(object : Callback<List<ImageData>> {
             override fun onFailure(call: Call<List<ImageData>>, t: Throwable) {
                 Log.e(MAIN_ACTIVITY, "Failed to get response", t)
+                apiResponseView.text = "Failure: ${t.message}"
             }
 
-            override fun onResponse(call: Call<List<ImageData>>, response:
-            Response<List<ImageData>>) {
-                if(response.isSuccessful){
-                    val image = response.body()
-                    val firstImage = image?.firstOrNull()?.imageUrl.orEmpty()
-                    if (firstImage.isNotBlank()) {
-                        imageLoader.loadImage(firstImage, imageResultView)
-                    } else {
-                        Log.d(MAIN_ACTIVITY, "Missing image URL")
+            override fun onResponse(
+                call: Call<List<ImageData>>,
+                response: Response<List<ImageData>>
+            ) {
+                if (response.isSuccessful) {
+                    val imageList = response.body()
+                    val firstImage = imageList?.firstOrNull()
+
+                    // Ambil nama breed pertama atau kosongkan
+                    val breedName = firstImage?.breeds?.firstOrNull()?.name.orEmpty()
+                    apiResponseView.text = breedName
+
+                    // Load image ke ImageView pakai Glide
+                    val imageUrl = firstImage?.imageUrl
+                    if (!imageUrl.isNullOrEmpty()) {
+                        Glide.with(this@MainActivity)
+                            .load(imageUrl)
+                            .centerCrop()
+                            .placeholder(android.R.color.darker_gray)
+                            .into(imageResultView)
                     }
-                    apiResponseView.text = getString(R.string.image_placeholder,
-                        firstImage)
-                }
-                else{
-                    Log.e(MAIN_ACTIVITY, "Failed to get response\n" +
-                            response.errorBody()?.string().orEmpty()
-                    )
+                } else {
+                    val error = response.errorBody()?.string().orEmpty()
+                    Log.e(MAIN_ACTIVITY, "Failed to get response\n$error")
+                    apiResponseView.text = "Error: $error"
                 }
             }
         })
